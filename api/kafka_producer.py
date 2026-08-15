@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import uuid
 
@@ -74,47 +75,27 @@ if _producer is None and BOOTSTRAP:
         LOG.debug("kafka-python producer setup failed: %s", e)
 
 
-def _local_write(topic: str, payload: dict) -> None:
-    base = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared", "local_kafka"))
-    os.makedirs(base, exist_ok=True)
-    filename = os.path.join(base, f"{topic}.ndjson")
-    record = {
-        "id": str(uuid.uuid4()),
-        "ts": int(time.time()),
-        "topic": topic,
-        "payload": payload,
-    }
-    with open(filename, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
 def publish_message(topic: str, payload: dict) -> None:
-    """Publish a JSON payload to Kafka (if enabled) or EventBus (in-memory fallback)."""
+    """Publish payload to EventBus (zero-latency execution) and background stream to Redpanda Kafka."""
     LOG.info("Publishing message to topic '%s' (job_id: %s)", topic, payload.get("job_id"))
 
-    # If real Redpanda Kafka producer is configured, send to Kafka (Consumer thread handles execution)
-    if _producer is not None:
-        try:
-            if _producer_type == "confluent":
-                _producer.produce(topic, json.dumps(payload).encode("utf-8"))
-                _producer.flush(0.1)
-            elif _producer_type == "kafka_python":
-                _producer.send(topic, payload)
-                _producer.flush()
-            return
-        except Exception:
-            LOG.exception("Failed to publish to Redpanda Kafka broker, falling back to EventBus")
-
-    # Fallback to EventBus only if Kafka is inactive
+    # 1. Zero-latency event dispatching to active stage handlers
     try:
         event_bus.publish(topic, payload)
     except Exception as e:
         LOG.error("Failed to publish to EventBus: %s", e)
 
-    # Local fallback file logging for inspection
-    try:
-        _local_write(topic, payload)
-    except Exception:
-        pass
+    # 2. Async streaming to Redpanda Cloud Kafka for cluster record logging
+    if _producer is not None:
+        def _async_send():
+            try:
+                if _producer_type == "confluent":
+                    _producer.produce(topic, json.dumps(payload).encode("utf-8"))
+                    _producer.flush(0.2)
+                elif _producer_type == "kafka_python":
+                    _producer.send(topic, payload)
+                    _producer.flush()
+            except Exception as ex:
+                LOG.warning(f"Background Redpanda send exception for topic '{topic}': {ex}")
 
-
+        threading.Thread(target=_async_send, daemon=True).start()
