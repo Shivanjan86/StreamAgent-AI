@@ -89,16 +89,10 @@ def _local_write(topic: str, payload: dict) -> None:
 
 
 def publish_message(topic: str, payload: dict) -> None:
-    """Publish a JSON payload to the EventBus and Kafka (if enabled)."""
+    """Publish a JSON payload to Kafka (if enabled) or EventBus (in-memory fallback)."""
     LOG.info("Publishing message to topic '%s' (job_id: %s)", topic, payload.get("job_id"))
 
-    # Publish to EventBus for active in-memory listeners
-    try:
-        event_bus.publish(topic, payload)
-    except Exception as e:
-        LOG.error("Failed to publish to EventBus: %s", e)
-
-    # If real Kafka producer is configured, send to Kafka too
+    # If real Redpanda Kafka producer is configured, send to Kafka (Consumer thread handles execution)
     if _producer is not None:
         try:
             if _producer_type == "confluent":
@@ -107,8 +101,15 @@ def publish_message(topic: str, payload: dict) -> None:
             elif _producer_type == "kafka_python":
                 _producer.send(topic, payload)
                 _producer.flush()
+            return
         except Exception:
-            LOG.exception("Failed to publish to Kafka broker")
+            LOG.exception("Failed to publish to Redpanda Kafka broker, falling back to EventBus")
+
+    # Fallback to EventBus only if Kafka is inactive
+    try:
+        event_bus.publish(topic, payload)
+    except Exception as e:
+        LOG.error("Failed to publish to EventBus: %s", e)
 
     # Local fallback file logging for inspection
     try:
