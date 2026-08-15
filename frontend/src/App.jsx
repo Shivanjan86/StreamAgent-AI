@@ -33,16 +33,17 @@ export default function App() {
 
   // WebSocket lifecycle
   useEffect(() => {
-    if (!job || job.status === 'completed' || job.status === 'failed') {
+    const jobId = job?.id;
+    if (!jobId || job?.status === 'completed' || job?.status === 'failed') {
       return undefined;
     }
 
-    const wsUrl = `${WS_BASE_URL}/ws/${job.id}`;
+    const wsUrl = `${WS_BASE_URL}/ws/${jobId}`;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
 
     socket.onopen = () => {
-      console.log('WebSocket connected for job:', job.id);
+      console.log('WebSocket connected for job:', jobId);
     };
 
     socket.onmessage = (event) => {
@@ -57,7 +58,7 @@ export default function App() {
           report: update.payload?.final_report || update.report || prev?.report,
         }));
 
-        fetchJobDetails(job.id);
+        fetchJobDetails(jobId);
       } catch (err) {
         console.error('Error parsing WebSocket update:', err);
       }
@@ -68,24 +69,24 @@ export default function App() {
     };
 
     socket.onclose = () => {
-      console.log('WebSocket closed');
+      console.log('WebSocket closed for job:', jobId);
     };
 
-    // Polling fallback interval every 1s
+    // Gentle polling fallback every 3s
     const intervalId = window.setInterval(async () => {
-      const updated = await fetchJobDetails(job.id);
+      const updated = await fetchJobDetails(jobId);
       if (updated && (updated.status === 'completed' || updated.status === 'failed')) {
         window.clearInterval(intervalId);
       }
-    }, 1000);
+    }, 3000);
 
     return () => {
-      if (socket.readyState === WebSocket.OPEN) {
+      if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
         socket.close();
       }
       window.clearInterval(intervalId);
     };
-  }, [job?.id, job?.status]);
+  }, [job?.id]);
 
   const handleSubmit = async (topic) => {
     setLoading(true);
