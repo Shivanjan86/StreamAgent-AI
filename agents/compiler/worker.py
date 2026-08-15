@@ -5,10 +5,12 @@ from typing import Any, Dict
 try:
     from ...api.db import add_stage_log, update_job
     from ...api.kafka_producer import publish_message
+    from ...shared.hf_client import LLAMA_33_70B, call_hf_llm
     from ...shared.kafka_config import COMPLETED_TOPIC, CRITIQUED_TOPIC, event_bus
 except Exception:
     from api.db import add_stage_log, update_job
     from api.kafka_producer import publish_message
+    from shared.hf_client import LLAMA_33_70B, call_hf_llm
     from shared.kafka_config import COMPLETED_TOPIC, CRITIQUED_TOPIC, event_bus
 
 logger = logging.getLogger("agent.compiler")
@@ -27,7 +29,26 @@ def run_compiler_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"[Compiler] Assembling final research report for job {job_id}")
     update_job(job_id, status="compiling", current_stage="compiling")
 
-    time.sleep(0.6)  # simulate markdown formatting time
+    final_report_text = None
+
+    # Try Hugging Face Llama 3.3 70B for rich executive synthesis & report writing
+    prompt = (
+        f"Topic: {topic}\n"
+        f"Quality Score: {score}%\n"
+        f"Critic Audit Feedback: {critic_feedback}\n"
+        f"Outline: {outline}\n"
+        f"Section Notes: {section_notes}\n"
+        f"Sources: {sources}\n\n"
+        "Write a comprehensive executive summary and synthesized introduction for this technical report in Markdown format. "
+        "Highlight key technological trends, practical deployments, and future outlook."
+    )
+
+    hf_exec_summary = call_hf_llm(
+        prompt,
+        system_prompt="You are a lead technical research writer compiling a multi-page intelligence paper.",
+        model=LLAMA_33_70B,
+        max_tokens=1000,
+    )
 
     # Build rich Markdown report
     lines = [
@@ -37,14 +58,23 @@ def run_compiler_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
         f"> **Fact-Check Notes**: *{critic_feedback}*",
         "",
         "## Executive Summary",
-        f"This report presents an in-depth research synthesis on **{topic.strip()}**. "
-        "Generated through an event-driven multi-agent LLM pipeline, this document aggregates real-world data, "
-        "technical architecture analysis, industry deployment challenges, and forward-looking strategic recommendations.",
+    ]
+
+    if hf_exec_summary:
+        lines.append(hf_exec_summary.strip())
+    else:
+        lines.append(
+            f"This report presents an in-depth research synthesis on **{topic.strip()}**. "
+            "Generated through an event-driven multi-agent LLM pipeline, this document aggregates real-world data, "
+            "technical architecture analysis, industry deployment challenges, and forward-looking strategic recommendations."
+        )
+
+    lines.extend([
         "",
         "---",
         "",
         "## Report Outline",
-    ]
+    ])
 
     for item in outline:
         lines.append(f"- {item}")
@@ -84,7 +114,7 @@ def run_compiler_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
             ref_idx += 1
 
     lines.append("")
-    lines.append("> *Report compiled automatically by Multi-Agent Research Generator.*")
+    lines.append("> *Report compiled automatically by StreamAgent AI Multi-Agent Pipeline.*")
 
     final_report_text = "\n".join(lines)
 

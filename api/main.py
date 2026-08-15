@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down API...")
 
 
-app = FastAPI(title="Multi-Agent Research API", lifespan=lifespan)
+app = FastAPI(title="StreamAgent AI API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -70,7 +70,7 @@ app.add_middleware(
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "service": "multi-agent-research-api"}
+    return {"status": "ok", "service": "streamagent-ai-api"}
 
 
 @app.post("/research")

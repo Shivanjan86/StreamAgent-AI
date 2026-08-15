@@ -119,13 +119,13 @@ export default function App() {
     <div style={{ minHeight: '100vh', padding: '40px 20px 80px 20px' }}>
       <header style={{ maxWidth: '1080px', margin: '0 auto 36px auto', textAlign: 'center' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 16px', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '30px', color: 'var(--accent-cyan)', fontSize: '0.8rem', fontWeight: 700, marginBottom: '16px', letterSpacing: '0.05em' }}>
-          <span>⚡ EVENT-DRIVEN AI PIPELINE</span>
+          <span>⚡ KAFKA EVENT-DRIVEN AI PIPELINE</span>
         </div>
-        <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', marginBottom: '12px' }}>
-          Multi-Agent Research Report Generator
+        <h1 style={{ fontSize: '2.8rem', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.02em', marginBottom: '12px' }}>
+          StreamAgent AI
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem', maxWidth: '720px', margin: '0 auto' }}>
-          FastAPI · React · LangChain Agent Workers · SQLite · Event Streaming · WebSockets
+          Real-Time Multi-Agent Deep Research Generator · Redpanda Kafka · FastAPI · React · WebSockets
         </p>
       </header>
 

@@ -5,10 +5,12 @@ from typing import Any, Dict, List
 try:
     from ...api.db import add_stage_log, update_job
     from ...api.kafka_producer import publish_message
+    from ...shared.hf_client import MISTRAL_7B, call_hf_llm
     from ...shared.kafka_config import SEARCHED_TOPIC, SUMMARIZED_TOPIC, event_bus
 except Exception:
     from api.db import add_stage_log, update_job
     from api.kafka_producer import publish_message
+    from shared.hf_client import MISTRAL_7B, call_hf_llm
     from shared.kafka_config import SEARCHED_TOPIC, SUMMARIZED_TOPIC, event_bus
 
 logger = logging.getLogger("agent.summarizer")
@@ -24,20 +26,41 @@ def run_summarizer_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"[Summarizer] Synthesizing notes for job {job_id} across {len(sources)} sources")
     update_job(job_id, status="summarizing", current_stage="summarizing")
 
-    time.sleep(0.7)  # simulate synthesis processing time
-
     section_notes = []
 
     for sq in sub_questions:
         sq_id = sq["id"]
         focus = sq.get("focus_area", f"Section {sq_id}")
+        q_text = sq["question"]
         sq_sources = [s for s in sources if s.get("sub_question_id") == sq_id]
 
         citations = [s["url"] for s in sq_sources if "url" in s]
 
+        # Try Hugging Face model for synthesis
+        raw_snippets = "\n".join([f"- {s.get('title')}: {s.get('snippet')}" for s in sq_sources])
+        prompt = (
+            f"Research Question: {q_text}\n"
+            f"Topic: {topic}\n"
+            f"Web Sources & Snippets:\n{raw_snippets}\n\n"
+            "Summarize the key insights into 3 concise, highly technical bullet points. Format each bullet point as '• **[Short Title]**: [Detailed Insight]'"
+        )
+
+        hf_summary = call_hf_llm(
+            prompt,
+            system_prompt="You are a senior technical analyst synthesizing research papers and market data.",
+            model=MISTRAL_7B,
+            max_tokens=600,
+        )
+
         findings = []
-        for s in sq_sources:
-            findings.append(f"• **{s['title']}**: {s['snippet']}")
+        if hf_summary:
+            for line in hf_summary.strip().split("\n"):
+                if line.strip():
+                    findings.append(line.strip())
+
+        if not findings:
+            for s in sq_sources:
+                findings.append(f"• **{s['title']}**: {s['snippet']}")
 
         if not findings:
             findings.append(f"• Baseline research indicates rapid developments in {topic} regarding {focus}.")
@@ -45,7 +68,7 @@ def run_summarizer_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
         section_notes.append({
             "sub_question_id": sq_id,
             "section_title": focus,
-            "question": sq["question"],
+            "question": q_text,
             "key_findings": findings,
             "citations": citations,
         })
