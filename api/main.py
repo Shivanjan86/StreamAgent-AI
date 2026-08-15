@@ -22,7 +22,7 @@ try:
     from agents.searcher.worker import register_searcher_worker
     from agents.summarizer.worker import register_summarizer_worker
     from shared.kafka_config import REQUEST_TOPIC
-    from status_relay.worker import manager as ws_manager, register_status_relay
+    from status_relay.worker import manager as ws_manager, register_status_relay, set_main_loop
 except ImportError:
     from .db import create_job, get_job, get_job_logs, init_db
     from .kafka_producer import publish_message
@@ -33,7 +33,7 @@ except ImportError:
     from ..agents.searcher.worker import register_searcher_worker
     from ..agents.summarizer.worker import register_summarizer_worker
     from ..shared.kafka_config import REQUEST_TOPIC
-    from ..status_relay.worker import manager as ws_manager, register_status_relay
+    from ..status_relay.worker import manager as ws_manager, register_status_relay, set_main_loop
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api.main")
@@ -41,7 +41,13 @@ logger = logging.getLogger("api.main")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup initialization
+    # Startup initialization - capture main asyncio event loop for WebSockets
+    try:
+        loop = asyncio.get_running_loop()
+        set_main_loop(loop)
+    except Exception as e:
+        logger.warning(f"Could not register main loop for status relay: {e}")
+
     logger.info("Initializing SQLite database...")
     init_db()
 

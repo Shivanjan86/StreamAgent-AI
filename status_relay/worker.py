@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from fastapi import WebSocket
 
 try:
@@ -25,6 +25,13 @@ except Exception:
     )
 
 logger = logging.getLogger("status_relay")
+main_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def set_main_loop(loop: asyncio.AbstractEventLoop):
+    global main_loop
+    main_loop = loop
+    logger.info("Main asyncio loop registered for Status Relay WebSockets.")
 
 
 class ConnectionManager:
@@ -49,7 +56,7 @@ class ConnectionManager:
     async def broadcast_to_job(self, job_id: str, message: dict):
         if job_id in self.active_connections:
             dead_sockets = []
-            for connection in self.active_connections[job_id]:
+            for connection in list(self.active_connections[job_id]):
                 try:
                     await connection.send_json(message)
                 except Exception as e:
@@ -98,13 +105,14 @@ def register_status_relay():
         def make_handler(t=topic):
             def handler(payload):
                 try:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.create_task(handle_stage_event(t, payload))
-                    except RuntimeError:
-                        new_loop = asyncio.new_event_loop()
-                        new_loop.run_until_complete(handle_stage_event(t, payload))
-                        new_loop.close()
+                    if main_loop and main_loop.is_running():
+                        asyncio.run_coroutine_threadsafe(handle_stage_event(t, payload), main_loop)
+                    else:
+                        try:
+                            loop = asyncio.get_running_loop()
+                            loop.create_task(handle_stage_event(t, payload))
+                        except RuntimeError:
+                            pass
                 except Exception as e:
                     logger.warning(f"Error handling status relay for topic {t}: {e}")
 
@@ -113,10 +121,3 @@ def register_status_relay():
         event_bus.subscribe(topic, make_handler(topic))
 
     logger.info("Status Relay registered across all stage topics.")
-
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    register_status_relay()
-
