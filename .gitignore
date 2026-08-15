@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Environment variables & secrets
+.env
+*.env
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Databases & local run logs
+*.db
+*.sqlite
+*.sqlite3
+shared/local_kafka/
+
+# Build outputs & system files
+frontend/dist/
+.vscode/
+.idea/
+.DS_Store
