@@ -86,8 +86,14 @@ def run_summarizer_agent(payload: Dict[str, Any]) -> Dict[str, Any]:
         findings = []
         if hf_summary:
             for line in hf_summary.strip().split("\n"):
-                if line.strip() and line.strip().startswith("•"):
-                    findings.append(line.strip())
+                sline = line.strip()
+                if sline:
+                    # Strip leading bullet indicators (*, -, bullet, 1.) and re-format uniformly
+                    cleaned = re.sub(r"^[\*\-\•\d\.\s]+", "", sline)
+                    if cleaned:
+                        if not cleaned.startswith("•"):
+                            cleaned = f"• {cleaned}"
+                        findings.append(cleaned)
 
         if not findings:
             findings = generate_dynamic_section_findings(topic, focus, q_text)
